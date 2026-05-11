@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#F3EFE8" />
+<title>Shape Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --paper: #F3EFE8;
+    --paper-deep: #EAE4D8;
+    --ink: #141210;
+    --muted: #8a8176;
+    --line: #d9d1c2;
+    --accent: #a8431d;
+    --serif: 'Instrument Serif', Georgia, serif;
+    --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); }
+  body {
+    color: var(--ink);
+    font-family: var(--serif);
+    min-height: 100vh;
+    background-image:
+      radial-gradient(rgba(120,100,80,0.035) 1px, transparent 1.5px),
+      radial-gradient(rgba(120,100,80,0.025) 1px, transparent 1.5px);
+    background-size: 3px 3px, 7px 7px;
+    background-position: 0 0, 2px 2px;
+    -webkit-font-smoothing: antialiased;
+  }
+  header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    padding: 22px 32px 16px; border-bottom: 1px solid var(--line);
+  }
+  .title-row { display: flex; align-items: baseline; gap: 14px; }
+  h1 { margin: 0; font-style: italic; font-weight: 400; font-size: 30px; letter-spacing: -0.01em; line-height: 1; }
+  .subtitle, .seed-label {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.22em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .seed-label { letter-spacing: 0.18em; }
+
+  .layout { display: flex; min-height: calc(100vh - 72px); }
+  .canvas-area {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 36px;
+  }
+  .single-view {
+    width: 100%; max-width: 620px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .single-view canvas {
+    width: 100%; aspect-ratio: 1 / 1; background: #FAF8F2; display: block;
+  }
+  .canvas-caption {
+    margin-top: 14px; display: flex; justify-content: space-between;
+    width: 100%; font-family: var(--mono); font-size: 10px;
+    letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted);
+  }
+  .canvas-shadow {
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02), 0 4px 18px rgba(60,45,30,0.08),
+                0 20px 60px rgba(60,45,30,0.07);
+  }
+
+  .grid-view {
+    width: 100%; max-width: 720px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  }
+  .grid-tile {
+    background: #FAF8F2; cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .grid-tile:hover { transform: translateY(-2px); box-shadow: 0 6px 24px rgba(60,45,30,0.12); }
+  .grid-tile canvas { width: 100%; aspect-ratio: 1 / 1; display: block; }
+
+  .controls-panel {
+    width: 320px; border-left: 1px solid var(--line);
+    background: var(--paper-deep); padding: 28px 26px;
+    overflow-y: auto; max-height: calc(100vh - 72px);
+  }
+  .section-label {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.22em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 10px; margin-top: 4px;
+  }
+
+  .style-options { display: flex; flex-direction: column; gap: 6px; margin-bottom: 22px; }
+  .style-btn {
+    padding: 10px 12px; border: 1px solid var(--line);
+    background: transparent; color: var(--ink); cursor: pointer;
+    display: flex; align-items: baseline; justify-content: space-between;
+    transition: all 0.18s ease; font-family: var(--serif); text-align: left;
+  }
+  .style-btn .label { font-style: italic; font-size: 16px; }
+  .style-btn .desc {
+    font-family: var(--mono); font-size: 9px;
+    letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.72;
+  }
+  .style-btn.active { background: var(--ink); color: var(--paper); }
+
+  .segmented {
+    display: flex; border: 1px solid var(--line); border-radius: 2px;
+    overflow: hidden; background: var(--paper-deep); margin-bottom: 24px;
+  }
+  .segmented button {
+    flex: 1; padding: 9px 10px; border: none; background: transparent;
+    color: var(--ink); cursor: pointer; font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    transition: all 0.18s ease;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .segmented button.active { background: var(--ink); color: var(--paper); }
+  .segmented button svg { width: 12px; height: 12px; }
+
+  .slider-row { margin-bottom: 18px; }
+  .slider-row .row-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .slider-row .slabel { font-style: italic; font-size: 15px; color: var(--ink); letter-spacing: 0.01em; }
+  .slider-row .svalue { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 0.04em; }
+  input[type=range].shape-slider {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 2px; background: var(--line);
+    border-radius: 1px; outline: none; cursor: pointer; margin: 0;
+  }
+  .shape-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 18px; height: 18px; background: var(--ink);
+    border: none; border-radius: 0; cursor: grab;
+    transition: transform 0.15s ease;
+  }
+  .shape-slider::-webkit-slider-thumb:active { transform: scale(1.15); }
+  .shape-slider::-moz-range-thumb {
+    width: 14px; height: 14px; background: var(--ink);
+    border: none; border-radius: 0; cursor: grab;
+  }
+
+  .actions {
+    display: flex; flex-direction: column; gap: 10px;
+    margin-top: 22px; padding-top: 22px; border-top: 1px solid var(--line);
+  }
+  .btn-primary, .btn-secondary {
+    font-family: var(--mono); font-size: 11px;
+    letter-spacing: 0.16em; text-transform: uppercase;
+    padding: 11px 16px; border: 1px solid var(--ink); cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    gap: 8px; transition: all 0.18s ease;
+  }
+  .btn-primary { background: var(--ink); color: var(--paper); }
+  .btn-primary:hover { background: var(--accent); border-color: var(--accent); }
+  .btn-secondary { background: transparent; color: var(--ink); }
+  .btn-secondary:hover { background: var(--ink); color: var(--paper); }
+  .btn-primary svg, .btn-secondary svg { width: 13px; height: 13px; }
+
+  .grid-hint {
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em;
+    color: var(--muted); line-height: 1.5; margin: 0; text-align: center;
+  }
+  .studio-quote {
+    margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line);
+    font-style: italic; font-size: 13px; color: var(--muted); line-height: 1.5;
+  }
+
+  .preview-backdrop {
+    position: fixed; inset: 0; background: rgba(20,18,16,0.92); z-index: 1000;
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    padding: 22px; animation: fade-in 0.18s ease;
+  }
+  .preview-backdrop.open { display: flex; }
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  .preview-content {
+    max-width: 560px; width: 100%;
+    display: flex; flex-direction: column; align-items: center; gap: 18px;
+  }
+  .preview-image {
+    max-width: 100%; max-height: 62vh; object-fit: contain;
+    background-color: #faf8f2;
+    background-image:
+      linear-gradient(45deg, #e6e0d2 25%, transparent 25%),
+      linear-gradient(-45deg, #e6e0d2 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #e6e0d2 75%),
+      linear-gradient(-45deg, transparent 75%, #e6e0d2 75%);
+    background-size: 18px 18px;
+    background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  }
+  .preview-image.white-bg { background: #ffffff; }
+  .preview-text {
+    color: var(--paper); font-style: italic; font-size: 17px;
+    line-height: 1.4; text-align: center; margin: 0; max-width: 420px;
+  }
+
+  @media (max-width: 900px) {
+    .layout { flex-direction: column; }
+    .controls-panel { width: 100%; border-left: none; border-top: 1px solid var(--line); max-height: none; }
+    .canvas-area { padding: 24px 18px; }
+  }
+  @media (max-width: 480px) {
+    header { padding: 16px 20px 12px; }
+    h1 { font-size: 24px; }
+    .subtitle { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-row">
+    <h1>Shape Studio</h1>
+    <span class="subtitle">a generator for inspiration</span>
+  </div>
+  <div class="seed-label">no.<span id="header-seed">000000</span></div>
+</header>
+
+<div class="layout">
+  <div class="canvas-area">
+    <div id="single-view" class="single-view">
+      <canvas id="main-canvas" width="1024" height="1024" class="canvas-shadow"></canvas>
+      <div class="canvas-caption">
+        <span id="caption-style">- silhouette - c6</span>
+        <span id="caption-seed">000000 / studio</span>
+      </div>
+    </div>
+    <div id="grid-view" class="grid-view" style="display:none">
+      <div class="grid-tile canvas-shadow" data-grid="0"><canvas width="600" height="600"></canvas></div>
+      <div class="grid-tile canvas-shadow" data-grid="1"><canvas width="600" height="600"></canvas></div>
+      <div class="grid-tile canvas-shadow" data-grid="2"><canvas width="600" height="600"></canvas></div>
+      <div class="grid-tile canvas-shadow" data-grid="3"><canvas width="600" height="600"></canvas></div>
+      <div class="grid-tile canvas-shadow" data-grid="4"><canvas width="600" height="600"></canvas></div>
+      <div class="grid-tile canvas-shadow" data-grid="5"><canvas width="600" height="600"></canvas></div>
+    </div>
+  </div>
+
+  <aside class="controls-panel">
+    <div class="section-label">Style</div>
+    <div class="style-options">
+      <button class="style-btn active" data-style="silhouette">
+        <span class="label">Silhouette</span>
+        <span class="desc">subtraction</span>
+      </button>
+      <button class="style-btn" data-style="gestural">
+        <span class="label">Gestural</span>
+        <span class="desc">brush - pressure</span>
+      </button>
+      <button class="style-btn" data-style="sketchy">
+        <span class="label">Sketchy</span>
+        <span class="desc">layers</span>
+      </button>
+    </div>
+
+    <div class="section-label">Display</div>
+    <div class="segmented" data-segmented="display">
+      <button class="active" data-display="single">Single</button>
+      <button data-display="grid">Grid of 6</button>
+    </div>
+
+    <div class="section-label">Controls</div>
+    <div class="slider-row">
+      <div class="row-top"><span class="slabel">Complexity</span><span class="svalue" id="val-complexity">6</span></div>
+      <input type="range" class="shape-slider" id="slider-complexity" min="1" max="10" step="1" value="6" />
+    </div>
+    <div class="slider-row">
+      <div class="row-top"><span class="slabel">Organic / Industrial</span><span class="svalue" id="val-organic">0.25</span></div>
+      <input type="range" class="shape-slider" id="slider-organic" min="0" max="1" step="0.01" value="0.25" />
+    </div>
+    <div class="slider-row">
+      <div class="row-top"><span class="slabel">Density</span><span class="svalue" id="val-density">0.55</span></div>
+      <input type="range" class="shape-slider" id="slider-density" min="0" max="1" step="0.01" value="0.55" />
+    </div>
+    <div class="slider-row">
+      <div class="row-top"><span class="slabel">Roughness</span><span class="svalue" id="val-roughness">0.40</span></div>
+      <input type="range" class="shape-slider" id="slider-roughness" min="0" max="1" step="0.01" value="0.4" />
+    </div>
+    <div class="slider-row">
+      <div class="row-top"><span class="slabel">Scale variation</span><span class="svalue" id="val-scaleVar">0.55</span></div>
+      <input type="range" class="shape-slider" id="slider-scaleVar" min="0" max="1" step="0.01" value="0.55" />
+    </div>
+    <div class="slider-row">
+      <div class="row-top"><span class="slabel">Asymmetry</span><span class="svalue" id="val-asymmetry">0.40</span></div>
+      <input type="range" class="shape-slider" id="slider-asymmetry" min="0" max="1" step="0.01" value="0.4" />
+    </div>
+
+    <div style="height: 14px"></div>
+    <div class="section-label">Export background</div>
+    <div class="segmented" data-segmented="bg">
+      <button class="active" data-bg="transparent">Transparent</button>
+      <button data-bg="white">White</button>
+    </div>
+
+    <div class="actions">
+      <button class="btn-primary" id="btn-new">New shape</button>
+      <button class="btn-secondary" id="btn-download">
+        <span id="dl-label">Download PNG</span>
+      </button>
+      <p class="grid-hint" id="grid-hint" style="display:none">Tap any tile to open it in single view and download.</p>
+    </div>
+
+    <div class="studio-quote">
+      Let the shape suggest something. Rotate your screen. Squint. The form you see first is rarely the most interesting one.
+    </div>
+  </aside>
+</div>
+
+<div id="modal" class="preview-backdrop">
+  <div class="preview-content">
+    <img id="preview-img" class="preview-image" alt="Generated shape" />
+    <p class="preview-text">
+      On iPhone or iPad, press and hold the image, then tap <em>Save to Photos</em> or <em>Save to Files</em>. On desktop, your download has already started.
+    </p>
+    <button class="btn-secondary" id="btn-close-preview" style="background: transparent; color: var(--paper); border-color: var(--paper);">Done</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// Seeded PRNG (mulberry32)
+function mulberry32(seed) {
+  var s = seed >>> 0;
+  return function () {
+    s = (s + 0x6d2b79f5) >>> 0;
+    var t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function edgeNoise(angle, seed, octaves) {
+  if (octaves === undefined) octaves = 4;
+  var n = 0, amp = 1, freq = 1, totalAmp = 0;
+  for (var i = 0; i < octaves; i++) {
+    var phase1 = seed * (i + 1) * 1.731;
+    var phase2 = seed * (i + 1) * 0.913 + 1.7;
+    n += (Math.sin(angle * freq + phase1) * 0.6 + Math.cos(angle * freq * 1.3 + phase2) * 0.4) * amp;
+    totalAmp += amp;
+    amp *= 0.55;
+    freq *= 2.07;
+  }
+  return n / totalAmp;
+}
+
+function drawBlob(ctx, x, y, r, organic, roughness, rng) {
+  var seed = rng() * 1000;
+  var points = organic > 0.7 ? 8 + Math.floor(rng() * 8) : 64;
+  var aspect = 1 + (rng() - 0.5) * (1 - organic) * 1.4;
+  var angleOffset = rng() * Math.PI * 2;
+
+  var numLobes = 2 + Math.floor(rng() * 3);
+  var lobes = [];
+  for (var i = 0; i < numLobes; i++) {
+    lobes.push({
+      angle: rng() * Math.PI * 2,
+      strength: 0.4 + rng() * 0.8,
+      width: 0.5 + rng() * 1.2
+    });
+  }
+  var numInlets = 1 + Math.floor(rng() * 2);
+  var inlets = [];
+  for (var j = 0; j < numInlets; j++) {
+    inlets.push({
+      angle: rng() * Math.PI * 2,
+      strength: 0.25 + rng() * 0.4,
+      width: 0.4 + rng() * 0.8
+    });
+  }
+
+  ctx.beginPath();
+  for (var k = 0; k <= points; k++) {
+    var t = k / points;
+    var angle = t * Math.PI * 2;
+    var ca = Math.cos(angle - angleOffset);
+    var sa = Math.sin(angle - angleOffset);
+    var aspectFactor = 1 / Math.sqrt(ca * ca / (aspect * aspect) + sa * sa);
+    var circleR = r * aspectFactor;
+    var squareR = r / Math.max(Math.abs(Math.cos(angle)), Math.abs(Math.sin(angle)));
+    var baseR = circleR * (1 - organic) + squareR * organic;
+
+    if (organic < 0.7) {
+      var lobeContribution = 0;
+      for (var li = 0; li < lobes.length; li++) {
+        var lobe = lobes[li];
+        var dAng = angle - lobe.angle;
+        while (dAng > Math.PI) dAng -= Math.PI * 2;
+        while (dAng < -Math.PI) dAng += Math.PI * 2;
+        var falloff = Math.exp(-(dAng * dAng) / (lobe.width * lobe.width));
+        lobeContribution += lobe.strength * falloff;
+      }
+      var inletContribution = 0;
+      for (var ii = 0; ii < inlets.length; ii++) {
+        var inlet = inlets[ii];
+        var dAngI = angle - inlet.angle;
+        while (dAngI > Math.PI) dAngI -= Math.PI * 2;
+        while (dAngI < -Math.PI) dAngI += Math.PI * 2;
+        var falloffI = Math.exp(-(dAngI * dAngI) / (inlet.width * inlet.width));
+        inletContribution += inlet.strength * falloffI;
+      }
+      var lobeFactor = (1 - organic);
+      baseR *= (1 + lobeContribution * lobeFactor - inletContribution * lobeFactor * 0.7);
+    }
+
+    var noise = edgeNoise(angle, seed, 4) * roughness * 0.7;
+    var radius = Math.max(r * 0.05, baseR * (1 + noise));
+    var px = x + Math.cos(angle) * radius;
+    var py = y + Math.sin(angle) * radius;
+    if (k === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawBrushStroke(ctx, x1, y1, x2, y2, cx, cy, width, organic, roughness, rng) {
+  var steps = 60;
+  for (var i = 0; i < steps; i++) {
+    var t = i / (steps - 1);
+    var pressure = Math.sin(t * Math.PI) * 0.9 + 0.15;
+    var px, py;
+    if (organic < 0.5) {
+      var mt = 1 - t;
+      px = mt * mt * x1 + 2 * mt * t * cx + t * t * x2;
+      py = mt * mt * y1 + 2 * mt * t * cy + t * t * y2;
+    } else {
+      if (t < 0.5) {
+        var tt1 = t * 2;
+        px = x1 + (cx - x1) * tt1;
+        py = y1 + (cy - y1) * tt1;
+      } else {
+        var tt2 = (t - 0.5) * 2;
+        px = cx + (x2 - cx) * tt2;
+        py = cy + (y2 - cy) * tt2;
+      }
+    }
+    px += (rng() - 0.5) * roughness * width * 0.4;
+    py += (rng() - 0.5) * roughness * width * 0.4;
+    var w = width * pressure;
+    ctx.beginPath();
+    if (organic > 0.6) ctx.rect(px - w, py - w, w * 2, w * 2);
+    else ctx.arc(px, py, w, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function generateSilhouette(ctx, W, H, p, rng) {
+  var off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  var octx = off.getContext('2d');
+  octx.fillStyle = '#000000';
+
+  var cNorm = (p.complexity - 1) / 9;
+  var cPow = Math.pow(cNorm, 1.4);
+  var numBlobs = Math.max(1, Math.round(1 + cPow * 60));
+
+  var offsetX = (rng() - 0.5) * p.asymmetry * W * 0.55;
+  var offsetY = (rng() - 0.5) * p.asymmetry * H * 0.55;
+  var cx = W / 2 + offsetX;
+  var cy = H / 2 + offsetY;
+  var spread = Math.min(W, H) * (0.08 + (1 - p.density) * 0.32);
+
+  for (var i = 0; i < numBlobs; i++) {
+    var angle = rng() * Math.PI * 2;
+    var distRand = Math.pow(rng(), 0.3 + (1 - p.density) * 1.5);
+    var asymStretch = 1 + p.asymmetry * (rng() - 0.3) * 2;
+    var dist = distRand * spread * asymStretch;
+    var x = cx + Math.cos(angle) * dist;
+    var y = cy + Math.sin(angle) * dist * (1 - p.asymmetry * 0.5);
+    var baseSize = Math.min(W, H) * 0.07;
+    var uniformSize = 0.7 + rng() * 0.6;
+    var wildSize = Math.pow(rng(), 2.5) * 4 + 0.2;
+    var sizeJitter = uniformSize * (1 - p.scaleVariation) + wildSize * p.scaleVariation;
+    var size = baseSize * sizeJitter;
+    drawBlob(octx, x, y, size, p.organic, p.roughness, rng);
+  }
+
+  octx.globalCompositeOperation = 'destination-out';
+  octx.fillStyle = '#000000';
+  var numErase = Math.round(cPow * 14);
+  for (var e = 0; e < numErase; e++) {
+    var ea = rng() * Math.PI * 2;
+    var ed = rng() * spread * 0.85;
+    var ex = cx + Math.cos(ea) * ed;
+    var ey = cy + Math.sin(ea) * ed;
+    var baseEraseSize = Math.min(W, H) * (0.04 + rng() * 0.09);
+    var eraseSize = baseEraseSize * (0.5 + p.scaleVariation * 1.8);
+    drawBlob(octx, ex, ey, eraseSize, p.organic, p.roughness * 1.3, rng);
+  }
+  octx.globalCompositeOperation = 'source-over';
+
+  octx.fillStyle = '#000000';
+  var numSat = Math.round(cPow * 12);
+  for (var s = 0; s < numSat; s++) {
+    var sa2 = rng() * Math.PI * 2;
+    var satDist = spread * (1.0 + rng() * 1.0);
+    var sx = cx + Math.cos(sa2) * satDist;
+    var sy = cy + Math.sin(sa2) * satDist;
+    var ssize = Math.min(W, H) * 0.022 * (0.3 + rng() * (1.5 + p.scaleVariation * 3));
+    drawBlob(octx, sx, sy, ssize, p.organic, p.roughness, rng);
+  }
+
+  ctx.globalAlpha = 0.18;
+  ctx.drawImage(off, 0, 0);
+  ctx.globalAlpha = 0.92;
+  ctx.drawImage(off, 0, 0);
+  ctx.globalAlpha = 1;
+}
+
+function generateGestural(ctx, W, H, p, rng) {
+  ctx.fillStyle = 'rgba(10, 8, 6, 0.95)';
+  var cNorm = (p.complexity - 1) / 9;
+  var cPow = Math.pow(cNorm, 1.4);
+  var numStrokes = Math.max(1, Math.round(1 + cPow * 30));
+
+  var offsetX = (rng() - 0.5) * p.asymmetry * W * 0.55;
+  var offsetY = (rng() - 0.5) * p.asymmetry * H * 0.55;
+  var cx = W / 2 + offsetX;
+  var cy = H / 2 + offsetY;
+  var spread = Math.min(W, H) * (0.1 + (1 - p.density) * 0.3);
+
+  for (var i = 0; i < numStrokes; i++) {
+    var len = spread * (0.5 + rng() * (1 + p.scaleVariation * 2.5));
+    var angle = rng() * Math.PI * 2;
+    var startAngle = rng() * Math.PI * 2;
+    var startDist = Math.pow(rng(), 0.4 + (1 - p.density)) * spread * 0.95;
+    var x1 = cx + Math.cos(startAngle) * startDist;
+    var y1 = cy + Math.sin(startAngle) * startDist * (1 - p.asymmetry * 0.4);
+    var x2 = x1 + Math.cos(angle) * len;
+    var y2 = y1 + Math.sin(angle) * len;
+    var midX = (x1 + x2) / 2;
+    var midY = (y1 + y2) / 2;
+    var perpAngle = angle + Math.PI / 2;
+    var kick = len * (0.1 + rng() * 0.7) * (rng() > 0.5 ? 1 : -1);
+    var cxC = midX + Math.cos(perpAngle) * kick;
+    var cyC = midY + Math.sin(perpAngle) * kick;
+    var baseWidth = Math.min(W, H) * 0.014 * (0.5 + rng() * (1 + p.scaleVariation * 3));
+    drawBrushStroke(ctx, x1, y1, x2, y2, cxC, cyC, baseWidth, p.organic, p.roughness, rng);
+  }
+
+  var numAccents = Math.round(cPow * 18);
+  for (var a = 0; a < numAccents; a++) {
+    var aa = rng() * Math.PI * 2;
+    var ad = rng() * spread * 1.1;
+    var ax = cx + Math.cos(aa) * ad;
+    var ay = cy + Math.sin(aa) * ad;
+    var asize = Math.min(W, H) * 0.009 * (0.4 + rng() * (1 + p.scaleVariation * 1.5));
+    drawBlob(ctx, ax, ay, asize, p.organic, p.roughness, rng);
+  }
+}
+
+function generateSketchy(ctx, W, H, p, rng) {
+  var off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  var octx = off.getContext('2d');
+
+  var offsetX = (rng() - 0.5) * p.asymmetry * W * 0.55;
+  var offsetY = (rng() - 0.5) * p.asymmetry * H * 0.55;
+  var cx = W / 2 + offsetX;
+  var cy = H / 2 + offsetY;
+  var spread = Math.min(W, H) * (0.1 + (1 - p.density) * 0.28);
+
+  octx.fillStyle = '#000000';
+  var cNorm = (p.complexity - 1) / 9;
+  var cPow = Math.pow(cNorm, 1.4);
+  var numBroad = Math.max(1, Math.round(1 + cPow * 40));
+  for (var i = 0; i < numBroad; i++) {
+    var len = spread * (0.6 + rng() * (1 + p.scaleVariation * 2));
+    var angle = rng() * Math.PI * 2;
+    var startDist = Math.pow(rng(), 0.4 + (1 - p.density)) * spread * 0.8;
+    var startAngle = rng() * Math.PI * 2;
+    var x1 = cx + Math.cos(startAngle) * startDist;
+    var y1 = cy + Math.sin(startAngle) * startDist;
+    var x2 = x1 + Math.cos(angle) * len;
+    var y2 = y1 + Math.sin(angle) * len;
+    var midX = (x1 + x2) / 2;
+    var midY = (y1 + y2) / 2;
+    var perp = angle + Math.PI / 2;
+    var kick = len * (rng() - 0.5) * 0.7;
+    var cxC = midX + Math.cos(perp) * kick;
+    var cyC = midY + Math.sin(perp) * kick;
+    var width = Math.min(W, H) * 0.018 * (0.6 + rng() * (1 + p.scaleVariation * 2.5));
+    drawBrushStroke(octx, x1, y1, x2, y2, cxC, cyC, width, p.organic, p.roughness * 1.3, rng);
+  }
+
+  var numScratch = Math.round(cPow * 60);
+  for (var sc = 0; sc < numScratch; sc++) {
+    var sca = rng() * Math.PI * 2;
+    var scd = Math.pow(rng(), 0.6) * spread;
+    var scx = cx + Math.cos(sca) * scd;
+    var scy = cy + Math.sin(sca) * scd;
+    var scsize = Math.min(W, H) * 0.005 * (0.4 + rng() * (1.5 + p.scaleVariation * 2));
+    drawBlob(octx, scx, scy, scsize, p.organic, p.roughness * 1.5, rng);
+  }
+
+  octx.globalCompositeOperation = 'destination-out';
+  octx.fillStyle = '#000000';
+  var numBites = Math.round(cPow * 35 + p.density * 12);
+  for (var b = 0; b < numBites; b++) {
+    var ba = rng() * Math.PI * 2;
+    var bd = Math.pow(rng(), 0.6) * spread * 0.95;
+    var bx = cx + Math.cos(ba) * bd;
+    var by = cy + Math.sin(ba) * bd;
+    var baseSize = Math.min(W, H) * 0.009;
+    var bsize = baseSize * (0.4 + rng() * (1 + p.scaleVariation * 2));
+    octx.beginPath();
+    octx.arc(bx, by, bsize, 0, Math.PI * 2);
+    octx.fill();
+  }
+  octx.globalCompositeOperation = 'source-over';
+
+  ctx.globalAlpha = 0.55;
+  ctx.drawImage(off, 0, 0);
+  ctx.globalAlpha = 1;
+
+  ctx.fillStyle = 'rgba(10, 8, 6, 0.95)';
+  var numAccent = Math.round(cPow * 8);
+  for (var ac = 0; ac < numAccent; ac++) {
+    var aca = rng() * Math.PI * 2;
+    var acd = Math.pow(rng(), 0.4) * spread * 0.8;
+    var acx = cx + Math.cos(aca) * acd;
+    var acy = cy + Math.sin(aca) * acd;
+    var acsize = Math.min(W, H) * 0.008 * (0.6 + rng() * 1.5);
+    drawBlob(ctx, acx, acy, acsize, p.organic, p.roughness, rng);
+  }
+}
+
+function renderShape(canvas, params, seed, bgTransparent) {
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  if (!bgTransparent) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+  }
+  var rng = mulberry32(seed);
+  if (params.style === 'silhouette') generateSilhouette(ctx, W, H, params, rng);
+  else if (params.style === 'gestural') generateGestural(ctx, W, H, params, rng);
+  else generateSketchy(ctx, W, H, params, rng);
+}
+
+// State
+var state = {
+  style: 'silhouette',
+  display: 'single',
+  complexity: 6,
+  organic: 0.25,
+  density: 0.55,
+  roughness: 0.4,
+  scaleVar: 0.55,
+  asymmetry: 0.4,
+  seed: Math.floor(Math.random() * 1e9),
+  gridSeeds: [],
+  bgMode: 'transparent'
+};
+for (var gi = 0; gi < 6; gi++) state.gridSeeds.push(Math.floor(Math.random() * 1e9));
+
+var els = {
+  mainCanvas: document.getElementById('main-canvas'),
+  singleView: document.getElementById('single-view'),
+  gridView: document.getElementById('grid-view'),
+  gridCanvases: [].slice.call(document.querySelectorAll('.grid-tile canvas')),
+  headerSeed: document.getElementById('header-seed'),
+  captionStyle: document.getElementById('caption-style'),
+  captionSeed: document.getElementById('caption-seed'),
+  vals: {
+    complexity: document.getElementById('val-complexity'),
+    organic: document.getElementById('val-organic'),
+    density: document.getElementById('val-density'),
+    roughness: document.getElementById('val-roughness'),
+    scaleVar: document.getElementById('val-scaleVar'),
+    asymmetry: document.getElementById('val-asymmetry')
+  },
+  btnDownload: document.getElementById('btn-download'),
+  gridHint: document.getElementById('grid-hint'),
+  modal: document.getElementById('modal'),
+  previewImg: document.getElementById('preview-img'),
+  dlLabel: document.getElementById('dl-label')
+};
+
+function getParams() {
+  return {
+    style: state.style,
+    complexity: state.complexity,
+    organic: state.organic,
+    density: state.density,
+    roughness: state.roughness,
+    scaleVariation: state.scaleVar,
+    asymmetry: state.asymmetry
+  };
+}
+
+function seedLabel(s) {
+  var str = s.toString(36);
+  while (str.length < 6) str = '0' + str;
+  return str.slice(0, 6);
+}
+
+function render() {
+  var params = getParams();
+  els.singleView.style.display = state.display === 'single' ? '' : 'none';
+  els.gridView.style.display = state.display === 'grid' ? 'grid' : 'none';
+
+  if (state.display === 'single') {
+    renderShape(els.mainCanvas, params, state.seed, true);
+    els.btnDownload.style.display = 'flex';
+    els.gridHint.style.display = 'none';
+  } else {
+    for (var i = 0; i < state.gridSeeds.length; i++) {
+      renderShape(els.gridCanvases[i], params, state.gridSeeds[i], true);
+    }
+    els.btnDownload.style.display = 'none';
+    els.gridHint.style.display = 'block';
+  }
+
+  els.vals.complexity.textContent = state.complexity;
+  els.vals.organic.textContent = state.organic.toFixed(2);
+  els.vals.density.textContent = state.density.toFixed(2);
+  els.vals.roughness.textContent = state.roughness.toFixed(2);
+  els.vals.scaleVar.textContent = state.scaleVar.toFixed(2);
+  els.vals.asymmetry.textContent = state.asymmetry.toFixed(2);
+
+  var slabel = seedLabel(state.seed);
+  els.headerSeed.textContent = slabel;
+  els.captionStyle.textContent = '- ' + state.style + ' - c' + state.complexity;
+  els.captionSeed.textContent = slabel + ' / studio';
+
+  var sbtns = document.querySelectorAll('[data-style]');
+  for (var k = 0; k < sbtns.length; k++) {
+    sbtns[k].classList.toggle('active', sbtns[k].getAttribute('data-style') === state.style);
+  }
+  var dbtns = document.querySelectorAll('[data-display]');
+  for (var k2 = 0; k2 < dbtns.length; k2++) {
+    dbtns[k2].classList.toggle('active', dbtns[k2].getAttribute('data-display') === state.display);
+  }
+  var bbtns = document.querySelectorAll('[data-bg]');
+  for (var k3 = 0; k3 < bbtns.length; k3++) {
+    bbtns[k3].classList.toggle('active', bbtns[k3].getAttribute('data-bg') === state.bgMode);
+  }
+}
+
+// Wire events
+var styleBtns = document.querySelectorAll('[data-style]');
+for (var sb = 0; sb < styleBtns.length; sb++) {
+  styleBtns[sb].addEventListener('click', function (e) {
+    state.style = e.currentTarget.getAttribute('data-style');
+    render();
+  });
+}
+var dispBtns = document.querySelectorAll('[data-display]');
+for (var db = 0; db < dispBtns.length; db++) {
+  dispBtns[db].addEventListener('click', function (e) {
+    state.display = e.currentTarget.getAttribute('data-display');
+    render();
+  });
+}
+var bgBtns = document.querySelectorAll('[data-bg]');
+for (var bb = 0; bb < bgBtns.length; bb++) {
+  bgBtns[bb].addEventListener('click', function (e) {
+    state.bgMode = e.currentTarget.getAttribute('data-bg');
+    render();
+  });
+}
+
+var sliderDefs = [
+  ['slider-complexity', 'complexity', true],
+  ['slider-organic', 'organic', false],
+  ['slider-density', 'density', false],
+  ['slider-roughness', 'roughness', false],
+  ['slider-scaleVar', 'scaleVar', false],
+  ['slider-asymmetry', 'asymmetry', false]
+];
+for (var sd = 0; sd < sliderDefs.length; sd++) {
+  (function (def) {
+    var id = def[0], key = def[1], isInt = def[2];
+    document.getElementById(id).addEventListener('input', function (e) {
+      state[key] = isInt ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
+      render();
+    });
+  })(sliderDefs[sd]);
+}
+
+document.getElementById('btn-new').addEventListener('click', function () {
+  if (state.display === 'single') {
+    state.seed = Math.floor(Math.random() * 1e9);
+  } else {
+    state.gridSeeds = [];
+    for (var i = 0; i < 6; i++) state.gridSeeds.push(Math.floor(Math.random() * 1e9));
+  }
+  render();
+});
+
+var tiles = document.querySelectorAll('.grid-tile');
+for (var t2 = 0; t2 < tiles.length; t2++) {
+  tiles[t2].addEventListener('click', function (e) {
+    var i = parseInt(e.currentTarget.getAttribute('data-grid'), 10);
+    state.seed = state.gridSeeds[i];
+    state.display = 'single';
+    render();
+  });
+}
+
+function flashSaved() {
+  var original = els.dlLabel.textContent;
+  els.dlLabel.textContent = 'Saved';
+  setTimeout(function () { els.dlLabel.textContent = original; }, 1600);
+}
+
+async function downloadShape() {
+  var useSeed = state.seed;
+  var exportCanvas = document.createElement('canvas');
+  exportCanvas.width = 2048;
+  exportCanvas.height = 2048;
+  renderShape(exportCanvas, getParams(), useSeed, state.bgMode === 'transparent');
+
+  var blob = await new Promise(function (res) {
+    exportCanvas.toBlob(res, 'image/png');
+  });
+  var filename = 'shape-' + useSeed.toString(36) + '.png';
+
+  // 1. iOS share sheet
+  try {
+    var file = new File([blob], filename, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file] });
+      flashSaved();
+      return;
+    }
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+  }
+
+  // 2. Anchor download (desktop)
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  // 3. Preview modal fallback
+  els.previewImg.src = url;
+  els.previewImg.classList.toggle('white-bg', state.bgMode === 'white');
+  els.modal.classList.add('open');
+  flashSaved();
+}
+
+els.btnDownload.addEventListener('click', downloadShape);
+
+function closeModal() {
+  if (els.previewImg.src && els.previewImg.src.indexOf('blob:') === 0) {
+    URL.revokeObjectURL(els.previewImg.src);
+  }
+  els.previewImg.src = '';
+  els.modal.classList.remove('open');
+}
+document.getElementById('btn-close-preview').addEventListener('click', closeModal);
+els.modal.addEventListener('click', function (e) {
+  if (e.target === els.modal) closeModal();
+});
+
+// Initial render
+render();
+</script>
+
+</body>
+</html>

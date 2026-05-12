@@ -1,0 +1,1562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#ffffff" />
+<title>Shape Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script>
+  // Resolve theme synchronously before any paint to avoid flash of light mode.
+  // Order of preference: explicit user choice → system preference → light.
+  (function () {
+    try {
+      var stored = localStorage.getItem('shapeStudioTheme');
+      var theme = stored;
+      if (!theme && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        theme = 'dark';
+      }
+      if (theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    } catch (e) { /* localStorage blocked — fall back to light */ }
+  })();
+</script>
+<style>
+  /* ─── Airbnb design tokens (via getdesign.md) ─────────────────────── */
+  :root {
+    /* Brand & accent — Rausch is the documented single voltage */
+    --primary: #ff385c;
+    --primary-active: #e00b41;
+    --primary-disabled: #ffd1da;
+    --on-primary: #ffffff;
+
+    /* Blue from the DESIGN.md (legal-link), reused here as a CTA color */
+    --blue: #428bff;
+    --blue-active: #2470ee;
+    --blue-glow: rgba(66, 139, 255, 0.28);
+
+    /* Surface */
+    --canvas: #ffffff;
+    --surface-soft: #f7f7f7;
+    --surface-strong: #f2f2f2;
+
+    /* Text */
+    --ink: #222222;
+    --body: #3f3f3f;
+    --muted: #6a6a6a;
+    --muted-soft: #929292;
+
+    /* Hairlines */
+    --hairline: #dddddd;
+    --hairline-soft: #ebebeb;
+    --border-strong: #c1c1c1;
+
+    /* Type */
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                 Roboto, 'Helvetica Neue', sans-serif;
+
+    /* Radius */
+    --r-xs: 4px;
+    --r-sm: 8px;
+    --r-md: 14px;
+    --r-lg: 20px;
+    --r-xl: 32px;
+    --r-full: 9999px;
+
+    /* The single shadow tier */
+    --shadow-float:
+      rgba(0, 0, 0, 0.02) 0 0 0 1px,
+      rgba(0, 0, 0, 0.04) 0 2px 6px 0,
+      rgba(0, 0, 0, 0.1)  0 4px 8px 0;
+  }
+
+  /* ─── Dark mode ───────────────────────────────────────────────────── */
+  /* Extending the Airbnb tokens — the DESIGN.md notes Airbnb has no public
+     dark mode, so these are inferred to preserve the same value hierarchy:
+     canvas is the "paper", surface-soft is the floor below, surface-strong
+     is for raised container fills (segmented bgs, inputs). */
+  html[data-theme="dark"] {
+    --canvas: #1a1a1a;
+    --surface-soft: #0e0e0e;
+    --surface-strong: #262626;
+
+    --ink: #f1f1f1;
+    --body: #d0d0d0;
+    --muted: #8b8b8b;
+    --muted-soft: #6a6a6a;
+
+    --hairline: #2e2e2e;
+    --hairline-soft: #1f1f1f;
+    --border-strong: #4a4a4a;
+
+    /* Blue glow gets more presence against dark surfaces */
+    --blue-glow: rgba(66, 139, 255, 0.45);
+
+    /* Shadow tier reworked — pure-black shadows are invisible on dark surfaces.
+       Mix a faint white outline for definition + a darker drop for elevation. */
+    --shadow-float:
+      rgba(255, 255, 255, 0.04) 0 0 0 1px,
+      rgba(0, 0, 0, 0.5)        0 4px 16px 0;
+  }
+  /* Dark-mode specific component shadow overrides */
+  html[data-theme="dark"] .controls-panel {
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.04),
+      -4px 0 14px rgba(0, 0, 0, 0.5);
+  }
+  html[data-theme="dark"] .segmented button.active {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  }
+  html[data-theme="dark"] .btn-secondary:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  }
+  html[data-theme="dark"] .btn-secondary:active {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  }
+  html[data-theme="dark"] .shape-slider::-webkit-slider-thumb,
+  html[data-theme="dark"] .shape-slider::-moz-range-thumb {
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  }
+  /* Select chevron — SVGs in background-image can't use currentColor, so we
+     swap to a light-stroked version in dark mode. */
+  html[data-theme="dark"] select.studio-select {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1.5l5 5 5-5' fill='none' stroke='%23f0f0f0' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--surface-soft); }
+  body {
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* ─── Header ──────────────────────────────────────────────────────── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 32px;
+    height: 80px;
+    border-bottom: 1px solid var(--hairline);
+    background: var(--canvas);
+  }
+  .title-row { display: flex; align-items: center; gap: 12px; }
+  h1 {
+    margin: 0;
+    font-size: 22px;
+    font-weight: 600;
+    line-height: 1.18;
+    letter-spacing: -0.44px;
+    color: var(--ink);
+  }
+  .subtitle {
+    /* uppercase-tag style: 8px / 700 / 0.32px tracking, pill border */
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.32px;
+    text-transform: uppercase;
+    color: var(--ink);
+    background: var(--canvas);
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-full);
+    padding: 4px 8px;
+    line-height: 1.18;
+    white-space: nowrap;
+  }
+  .seed-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--muted);
+    line-height: 1.29;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  /* ─── Theme toggle (sun / moon) ───────────────────────────────────── */
+  .theme-toggle {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border-radius: var(--r-full);
+    border: 1px solid var(--hairline);
+    background: var(--canvas);
+    color: var(--ink);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+      background 0.2s ease,
+      border-color 0.2s ease,
+      color 0.2s ease,
+      transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+      box-shadow 0.2s ease;
+  }
+  .theme-toggle:hover {
+    background: var(--surface-strong);
+    transform: rotate(25deg);
+  }
+  .theme-toggle:active {
+    transform: rotate(25deg) scale(0.94);
+  }
+  .theme-icon {
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  /* Show moon in light mode (action: switch to dark) */
+  html:not([data-theme="dark"]) .theme-toggle .icon-moon { display: inline-flex; }
+  /* Show sun in dark mode (action: switch to light) */
+  html[data-theme="dark"]      .theme-toggle .icon-sun  { display: inline-flex; }
+
+  /* ─── Layout ──────────────────────────────────────────────────────── */
+  .layout { display: flex; min-height: calc(100vh - 80px); }
+  .canvas-area {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    min-width: 0;
+    background: transparent;
+  }
+  .single-view {
+    width: 100%;
+    max-width: 720px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .canvas-frame {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    max-width: 100%;
+    border-radius: var(--r-md);
+    overflow: hidden;
+  }
+  .canvas-frame.transparent-bg {
+    background-color: #fafafa;
+    background-image:
+      linear-gradient(45deg, #ebebeb 25%, transparent 25%),
+      linear-gradient(-45deg, #ebebeb 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #ebebeb 75%),
+      linear-gradient(-45deg, transparent 75%, #ebebeb 75%);
+    background-size: 22px 22px;
+    background-position: 0 0, 0 11px, 11px -11px, -11px 0;
+  }
+  .canvas-frame.white-bg { background: #ffffff; }
+  .canvas-frame canvas {
+    display: block;
+    max-width: 100%;
+    max-height: calc(100vh - 240px);
+    /* Custom rotation cursor — white halo + black arrow so it's visible on any background */
+    cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'><g fill='none' stroke='white' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'><path d='M22.5 14a8.5 8.5 0 1 1-2.7-6.2'/><polyline points='22.5 3.5 22.5 9 17 9'/></g><g fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M22.5 14a8.5 8.5 0 1 1-2.7-6.2'/><polyline points='22.5 3.5 22.5 9 17 9'/></g></svg>") 14 14, grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .canvas-frame canvas:active {
+    cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'><g fill='none' stroke='white' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'><path d='M22.5 14a8.5 8.5 0 1 1-2.7-6.2'/><polyline points='22.5 3.5 22.5 9 17 9'/></g><g fill='none' stroke='%23428bff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M22.5 14a8.5 8.5 0 1 1-2.7-6.2'/><polyline points='22.5 3.5 22.5 9 17 9'/></g></svg>") 14 14, grabbing;
+  }
+  .canvas-shadow { box-shadow: var(--shadow-float); }
+  .canvas-caption {
+    margin-top: 16px;
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.43;
+    color: var(--muted);
+  }
+
+  /* ─── Grid view ───────────────────────────────────────────────────── */
+  .grid-view {
+    width: 100%;
+    max-width: 720px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .grid-tile {
+    background: var(--canvas);
+    cursor: pointer;
+    border-radius: var(--r-md);
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .grid-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-float);
+  }
+  .grid-tile canvas {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    display: block;
+  }
+
+  /* ─── Controls panel ──────────────────────────────────────────────── */
+  .controls-panel {
+    width: 360px;
+    background: var(--canvas);
+    padding: 28px 24px;
+    overflow-y: auto;
+    max-height: calc(100vh - 80px);
+    /* Airbnb single shadow tier, cast leftward toward the canvas */
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.02),
+      -2px 0 6px 0 rgba(0, 0, 0, 0.04),
+      -4px 0 8px 0 rgba(0, 0, 0, 0.1);
+    position: relative;
+    z-index: 1;
+  }
+  .section-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--muted);
+    margin: 0 0 10px;
+    line-height: 1.29;
+  }
+  .section-block { margin-bottom: 24px; }
+  .controls-target-tint { color: var(--muted); }
+
+  /* ─── Form inputs ─────────────────────────────────────────────────── */
+  select.studio-select, input.studio-input {
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid var(--hairline);
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    font-weight: 400;
+    border-radius: var(--r-sm);
+    -webkit-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    height: 48px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    line-height: 1.25;
+  }
+  select.studio-select:focus, input.studio-input:focus {
+    outline: none;
+    border-color: var(--ink);
+    box-shadow: inset 0 0 0 1px var(--ink);
+  }
+  select.studio-select {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1.5l5 5 5-5' fill='none' stroke='%23222222' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 16px center;
+    padding-right: 40px;
+  }
+  .dimension-row { display: flex; gap: 8px; margin-top: 8px; align-items: center; }
+  .dimension-row input {
+    flex: 1;
+    min-width: 0;
+    cursor: text;
+    height: 44px;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: var(--font-sans);
+    font-weight: 500;
+  }
+  .dimension-row span {
+    font-size: 14px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
+  /* ─── Segmented controls (pill-like, Airbnb tab pattern) ─────────── */
+  .segmented {
+    display: flex;
+    background: var(--surface-strong);
+    border-radius: var(--r-sm);
+    padding: 4px;
+    gap: 4px;
+  }
+  .segmented button {
+    flex: 1;
+    padding: 9px 12px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: var(--r-xs);
+    transition: all 0.18s ease;
+    line-height: 1.29;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .segmented button:hover { color: var(--ink); }
+  .segmented button.active {
+    background: var(--canvas);
+    color: var(--ink);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  }
+
+  /* ─── Sliders ─────────────────────────────────────────────────────── */
+  .slider-row { margin-bottom: 18px; }
+  .slider-row:last-child { margin-bottom: 0; }
+  .slider-row .row-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+  }
+  .slider-row .slabel {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--ink);
+    line-height: 1.25;
+  }
+  .slider-row .svalue {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--muted);
+    line-height: 1.29;
+  }
+  input[type=range].shape-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--hairline);
+    border-radius: var(--r-full);
+    outline: none;
+    cursor: pointer;
+    margin: 0;
+  }
+  .shape-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    background: var(--ink);
+    border: 2px solid var(--canvas);
+    border-radius: var(--r-full);
+    cursor: grab;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .shape-slider::-webkit-slider-thumb:active { transform: scale(1.1); cursor: grabbing; }
+  .shape-slider::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    background: var(--ink);
+    border: 2px solid var(--canvas);
+    border-radius: var(--r-full);
+    cursor: grab;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  }
+  .editing-knockout input[type=range].shape-slider::-webkit-slider-thumb {
+    background: var(--primary);
+  }
+  .editing-knockout input[type=range].shape-slider::-moz-range-thumb {
+    background: var(--primary);
+  }
+  .editing-knockout .controls-target-tint { color: var(--primary); }
+
+  /* ─── Rotation row ────────────────────────────────────────────────── */
+  .rotation-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--canvas);
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-sm);
+  }
+  .rotation-value {
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--ink);
+    line-height: 1.25;
+  }
+  .link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--ink);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color 0.15s ease;
+  }
+  .link-btn:hover { color: var(--primary); }
+
+  /* ─── Buttons ─────────────────────────────────────────────────────── */
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--hairline);
+  }
+  .actions-row { display: flex; gap: 8px; }
+  .actions-row > button { flex: 1; }
+
+  .btn-primary, .btn-secondary {
+    font-family: var(--font-sans);
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    border-radius: var(--r-sm);
+    line-height: 1.25;
+    /* All animatable properties pre-declared so transitions feel smooth */
+    transition:
+      background 0.18s ease,
+      border-color 0.18s ease,
+      box-shadow 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+      transform 0.14s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform, box-shadow;
+  }
+
+  /* Primary CTA — Download. Blue, taller, slightly heavier weight. */
+  .btn-primary {
+    background: var(--blue);
+    color: var(--on-primary);
+    border: 1px solid var(--blue);
+    height: 56px;
+    padding: 14px 24px;
+    font-size: 17px;
+    font-weight: 600;
+  }
+  .btn-primary:hover {
+    background: var(--blue-active);
+    border-color: var(--blue-active);
+    box-shadow: 0 6px 20px var(--blue-glow);
+    transform: translateY(-1px);
+  }
+  .btn-primary:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 6px var(--blue-glow);
+  }
+
+  /* Secondary — New shape, Copy. White with ink outline. */
+  .btn-secondary {
+    background: var(--canvas);
+    color: var(--ink);
+    border: 1px solid var(--ink);
+    height: 48px;
+    padding: 12px 18px;
+    font-size: 15px;
+  }
+  .btn-secondary:hover {
+    background: var(--surface-soft);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    transform: translateY(-1px);
+  }
+  .btn-secondary:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  }
+
+  /* Icon container — inline-flex so SVG aligns to the label baseline */
+  .btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* New shape: refresh icon makes a full revolution */
+  #btn-new:hover .btn-icon { transform: rotate(360deg); }
+
+  /* Copy: icon does a tiny pop */
+  #btn-copy .btn-icon { transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1); }
+  #btn-copy:hover .btn-icon { transform: scale(1.18) translateY(-1px); }
+
+  /* Download: arrow nudges down then bounces back at hover-out */
+  #btn-download .btn-icon { transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1); }
+  #btn-download:hover .btn-icon { transform: translateY(3px); }
+
+  .grid-hint {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.43;
+    margin: 0;
+    text-align: center;
+  }
+  .studio-quote {
+    margin-top: 28px;
+    padding-top: 24px;
+    border-top: 1px solid var(--hairline);
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  /* ─── Modal ───────────────────────────────────────────────────────── */
+  .preview-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 22px;
+  }
+  .preview-backdrop.open { display: flex; }
+  .preview-content {
+    max-width: 560px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+  .preview-image {
+    max-width: 100%;
+    max-height: 62vh;
+    object-fit: contain;
+    background-color: #fafafa;
+    background-image:
+      linear-gradient(45deg, #ebebeb 25%, transparent 25%),
+      linear-gradient(-45deg, #ebebeb 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #ebebeb 75%),
+      linear-gradient(-45deg, transparent 75%, #ebebeb 75%);
+    background-size: 18px 18px;
+    background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    border-radius: var(--r-md);
+  }
+  .preview-image.white-bg { background: #ffffff; }
+  .preview-text {
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 400;
+    line-height: 1.5;
+    text-align: center;
+    margin: 0;
+    max-width: 420px;
+  }
+
+  /* ─── Responsive ──────────────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .layout { flex-direction: column; }
+    .controls-panel {
+      width: 100%;
+      border-left: none;
+      max-height: none;
+      box-shadow: none;
+    }
+    /* Canvas pinned to viewport top while controls scroll beneath it.
+       Sticky needs an opaque background so scrolling content is covered. */
+    .canvas-area {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      padding: 14px 18px;
+      background: var(--surface-soft);
+      /* Subtle bottom divider so the sticky bar is visually distinct from controls */
+      box-shadow: 0 1px 0 var(--hairline-soft);
+    }
+    .canvas-frame canvas { max-height: 42vh; }
+    .canvas-caption { margin-top: 8px; font-size: 13px; }
+  }
+  @media (max-width: 480px) {
+    header { padding: 0 20px; height: 64px; }
+    h1 { font-size: 20px; }
+    .subtitle { display: none; }
+    .canvas-frame canvas { max-height: 38vh; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-row">
+    <h1>Shape Studio</h1>
+    <span class="subtitle">v3 &middot; noise field</span>
+  </div>
+  <div class="header-right">
+    <div class="seed-label">no.<span id="header-seed">000000</span></div>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle dark mode">
+      <span class="theme-icon icon-moon" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M13 9.5A6 6 0 1 1 6.5 3a4.5 4.5 0 0 0 6.5 6.5z" />
+        </svg>
+      </span>
+      <span class="theme-icon icon-sun" aria-hidden="true">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8" cy="8" r="3" />
+          <line x1="8" y1="1.2" x2="8" y2="2.7" />
+          <line x1="8" y1="13.3" x2="8" y2="14.8" />
+          <line x1="1.2" y1="8" x2="2.7" y2="8" />
+          <line x1="13.3" y1="8" x2="14.8" y2="8" />
+          <line x1="3.4" y1="3.4" x2="4.5" y2="4.5" />
+          <line x1="11.5" y1="11.5" x2="12.6" y2="12.6" />
+          <line x1="3.4" y1="12.6" x2="4.5" y2="11.5" />
+          <line x1="11.5" y1="4.5" x2="12.6" y2="3.4" />
+        </svg>
+      </span>
+    </button>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="canvas-area">
+    <div id="single-view" class="single-view">
+      <div id="canvas-frame" class="canvas-frame transparent-bg canvas-shadow">
+        <canvas id="main-canvas" width="1024" height="1024"></canvas>
+      </div>
+      <div class="canvas-caption">
+        <span id="caption-style">c6 / drag canvas to rotate</span>
+        <span id="caption-seed">000000 / studio</span>
+      </div>
+    </div>
+    <div id="grid-view" class="grid-view" style="display:none">
+      <div class="grid-tile canvas-shadow" data-grid="0"><canvas width="600" height="600"></canvas></div>
+      <div class="grid-tile canvas-shadow" data-grid="1"><canvas width="600" height="600"></canvas></div>
+      <div class="grid-tile canvas-shadow" data-grid="2"><canvas width="600" height="600"></canvas></div>
+      <div class="grid-tile canvas-shadow" data-grid="3"><canvas width="600" height="600"></canvas></div>
+      <div class="grid-tile canvas-shadow" data-grid="4"><canvas width="600" height="600"></canvas></div>
+      <div class="grid-tile canvas-shadow" data-grid="5"><canvas width="600" height="600"></canvas></div>
+    </div>
+  </div>
+
+  <aside class="controls-panel" id="controls-panel">
+    <div class="section-block">
+      <div class="section-label">Canvas size</div>
+      <select class="studio-select" id="size-preset">
+        <option value="square-1024">Square &mdash; 1024 &times; 1024</option>
+        <option value="square-2048" selected>Square &mdash; 2048 &times; 2048</option>
+        <option value="portrait-4-5">Portrait 4:5 &mdash; 1080 &times; 1350</option>
+        <option value="story-9-16">Story 9:16 &mdash; 1080 &times; 1920</option>
+        <option value="landscape-16-9">Landscape 16:9 &mdash; 1920 &times; 1080</option>
+        <option value="wide-3-2">Wide 3:2 &mdash; 1800 &times; 1200</option>
+        <option value="a4-portrait">A4 Portrait &mdash; 2480 &times; 3508</option>
+        <option value="a4-landscape">A4 Landscape &mdash; 3508 &times; 2480</option>
+        <option value="custom">Custom&hellip;</option>
+      </select>
+      <div class="dimension-row" id="custom-size-row" style="display:none">
+        <input type="number" class="studio-input" id="custom-w" min="256" max="8192" step="1" value="1024" />
+        <span>&times;</span>
+        <input type="number" class="studio-input" id="custom-h" min="256" max="8192" step="1" value="1024" />
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="section-label">Display</div>
+      <div class="segmented" data-segmented="display">
+        <button class="active" data-display="single">Single</button>
+        <button data-display="grid">Grid of 6</button>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="section-label">Editing <span class="controls-target-tint" id="target-tint">&mdash; main shape</span></div>
+      <div class="segmented" data-segmented="target">
+        <button class="active" data-target="main">Main shape</button>
+        <button data-target="knockout">Knockouts</button>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="section-label">Controls</div>
+      <div class="slider-row">
+        <div class="row-top"><span class="slabel">Complexity</span><span class="svalue" id="val-complexity">6</span></div>
+        <input type="range" class="shape-slider" id="slider-complexity" min="1" max="10" step="1" value="6" />
+      </div>
+      <div class="slider-row">
+        <div class="row-top"><span class="slabel">Organic / Industrial</span><span class="svalue" id="val-organic">0.25</span></div>
+        <input type="range" class="shape-slider" id="slider-organic" min="0" max="1" step="0.01" value="0.25" />
+      </div>
+      <div class="slider-row">
+        <div class="row-top"><span class="slabel">Density</span><span class="svalue" id="val-density">0.55</span></div>
+        <input type="range" class="shape-slider" id="slider-density" min="0" max="1" step="0.01" value="0.55" />
+      </div>
+      <div class="slider-row">
+        <div class="row-top"><span class="slabel">Roughness</span><span class="svalue" id="val-roughness">0.40</span></div>
+        <input type="range" class="shape-slider" id="slider-roughness" min="0" max="1" step="0.01" value="0.4" />
+      </div>
+      <div class="slider-row">
+        <div class="row-top"><span class="slabel">Scale variation</span><span class="svalue" id="val-scaleVar">0.55</span></div>
+        <input type="range" class="shape-slider" id="slider-scaleVar" min="0" max="1" step="0.01" value="0.55" />
+      </div>
+      <div class="slider-row">
+        <div class="row-top"><span class="slabel">Asymmetry</span><span class="svalue" id="val-asymmetry">0.40</span></div>
+        <input type="range" class="shape-slider" id="slider-asymmetry" min="0" max="1" step="0.01" value="0.4" />
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="section-label">Rotation</div>
+      <div class="rotation-row">
+        <span class="rotation-value" id="rotation-value">0&deg;</span>
+        <button class="link-btn" id="reset-rotation">Reset</button>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="section-label">Export background</div>
+      <div class="segmented" data-segmented="bg">
+        <button class="active" data-bg="transparent">Transparent</button>
+        <button data-bg="white">White</button>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn-primary" id="btn-download">
+        <span class="btn-icon" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 2.5v8" /><polyline points="4.5 7 8 10.5 11.5 7" /><path d="M2.5 13.5h11" />
+          </svg>
+        </span>
+        <span id="dl-label">Download</span>
+      </button>
+      <div class="actions-row">
+        <button class="btn-secondary" id="btn-new">
+          <span class="btn-icon" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9" /><polyline points="13.5 2.5 13.5 5.5 10.5 5.5" />
+            </svg>
+          </span>
+          <span>New shape</span>
+        </button>
+        <button class="btn-secondary" id="btn-copy">
+          <span class="btn-icon" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="5.5" y="5.5" width="8.5" height="8.5" rx="1.5" /><path d="M2 10.5V3.5a1.5 1.5 0 0 1 1.5-1.5h7" />
+            </svg>
+          </span>
+          <span id="copy-label">Copy</span>
+        </button>
+      </div>
+      <p class="grid-hint" id="grid-hint" style="display:none">Tap any tile to open in single view.</p>
+    </div>
+
+    <div class="studio-quote">
+      Let the shape suggest something. Drag the canvas to rotate. The form you see first is rarely the most interesting one.
+    </div>
+  </aside>
+</div>
+
+<div id="modal" class="preview-backdrop">
+  <div class="preview-content">
+    <img id="preview-img" class="preview-image" alt="Generated shape" />
+    <p class="preview-text">
+      On iPhone or iPad, press and hold the image, then tap <em>Save to Photos</em> or <em>Save to Files</em>. On desktop, your download has already started.
+    </p>
+    <button class="btn-secondary" id="btn-close-preview" style="background: transparent; color: #ffffff; border-color: #ffffff;">Done</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// PRNG and noise
+function mulberry32(seed) {
+  var s = seed >>> 0;
+  return function () {
+    s = (s + 0x6d2b79f5) >>> 0;
+    var t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function hash2D(x, y, seed) {
+  var h = (x * 374761393 + y * 668265263 + seed * 1597334677) | 0;
+  h = ((h ^ (h >>> 13)) * 1274126177) | 0;
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295 * 2 - 1;
+}
+function smoothstep(t) {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  return t * t * (3 - 2 * t);
+}
+function valueNoise2D(x, y, seed) {
+  var x0 = Math.floor(x), y0 = Math.floor(y);
+  var sx = smoothstep(x - x0), sy = smoothstep(y - y0);
+  var v00 = hash2D(x0, y0, seed);
+  var v10 = hash2D(x0 + 1, y0, seed);
+  var v01 = hash2D(x0, y0 + 1, seed);
+  var v11 = hash2D(x0 + 1, y0 + 1, seed);
+  var ix0 = v00 * (1 - sx) + v10 * sx;
+  var ix1 = v01 * (1 - sx) + v11 * sx;
+  return ix0 * (1 - sy) + ix1 * sy;
+}
+function fbm2D(x, y, octaves, persistence, lacunarity, seed) {
+  var total = 0, amp = 1, freq = 1, maxAmp = 0;
+  for (var i = 0; i < octaves; i++) {
+    total += valueNoise2D(x * freq, y * freq, seed + i * 7919) * amp;
+    maxAmp += amp; amp *= persistence; freq *= lacunarity;
+  }
+  return total / maxAmp;
+}
+function warpedFBM(x, y, octaves, warpStrength, seed) {
+  if (warpStrength <= 0.001) return fbm2D(x, y, octaves, 0.5, 2.0, seed);
+  var wx = fbm2D(x, y, 3, 0.5, 2.0, seed + 17939) * warpStrength;
+  var wy = fbm2D(x + 5.2, y + 1.3, 3, 0.5, 2.0, seed + 31337) * warpStrength;
+  return fbm2D(x + wx, y + wy, octaves, 0.5, 2.0, seed);
+}
+function edgeNoise(angle, seed, octaves) {
+  if (octaves === undefined) octaves = 4;
+  var n = 0, amp = 1, freq = 1, totalAmp = 0;
+  for (var i = 0; i < octaves; i++) {
+    var phase1 = seed * (i + 1) * 1.731;
+    var phase2 = seed * (i + 1) * 0.913 + 1.7;
+    n += (Math.sin(angle * freq + phase1) * 0.6 + Math.cos(angle * freq * 1.3 + phase2) * 0.4) * amp;
+    totalAmp += amp; amp *= 0.55; freq *= 2.07;
+  }
+  return n / totalAmp;
+}
+
+// Blob primitive (used for protrusions, knockouts, satellites)
+function drawBlob(ctx, x, y, r, organic, roughness, rng) {
+  var seed = rng() * 1000;
+  var points = organic > 0.7 ? 8 + Math.floor(rng() * 8) : 64;
+  var aspect = 1 + (rng() - 0.5) * (1 - organic) * 1.4;
+  var angleOffset = rng() * Math.PI * 2;
+
+  var numLobes = 2 + Math.floor(rng() * 3);
+  var lobes = [];
+  for (var i = 0; i < numLobes; i++) {
+    lobes.push({ angle: rng() * Math.PI * 2, strength: 0.4 + rng() * 0.8, width: 0.5 + rng() * 1.2 });
+  }
+  var numInlets = 1 + Math.floor(rng() * 2);
+  var inlets = [];
+  for (var j = 0; j < numInlets; j++) {
+    inlets.push({ angle: rng() * Math.PI * 2, strength: 0.25 + rng() * 0.4, width: 0.4 + rng() * 0.8 });
+  }
+
+  ctx.beginPath();
+  for (var k = 0; k <= points; k++) {
+    var t = k / points;
+    var angle = t * Math.PI * 2;
+    var ca = Math.cos(angle - angleOffset);
+    var sa = Math.sin(angle - angleOffset);
+    var aspectFactor = 1 / Math.sqrt(ca * ca / (aspect * aspect) + sa * sa);
+    var circleR = r * aspectFactor;
+    var squareR = r / Math.max(Math.abs(Math.cos(angle)), Math.abs(Math.sin(angle)));
+    var baseR = circleR * (1 - organic) + squareR * organic;
+
+    if (organic < 0.7) {
+      var lobeContribution = 0;
+      for (var li = 0; li < lobes.length; li++) {
+        var lobe = lobes[li];
+        var dAng = angle - lobe.angle;
+        while (dAng > Math.PI) dAng -= Math.PI * 2;
+        while (dAng < -Math.PI) dAng += Math.PI * 2;
+        lobeContribution += lobe.strength * Math.exp(-(dAng * dAng) / (lobe.width * lobe.width));
+      }
+      var inletContribution = 0;
+      for (var ii = 0; ii < inlets.length; ii++) {
+        var inlet = inlets[ii];
+        var dAngI = angle - inlet.angle;
+        while (dAngI > Math.PI) dAngI -= Math.PI * 2;
+        while (dAngI < -Math.PI) dAngI += Math.PI * 2;
+        inletContribution += inlet.strength * Math.exp(-(dAngI * dAngI) / (inlet.width * inlet.width));
+      }
+      var lobeFactor = (1 - organic);
+      baseR *= (1 + lobeContribution * lobeFactor - inletContribution * lobeFactor * 0.7);
+    }
+
+    var noise = edgeNoise(angle, seed, 4) * roughness * 0.7;
+    var radius = Math.max(r * 0.05, baseR * (1 + noise));
+    var px = x + Math.cos(angle) * radius;
+    var py = y + Math.sin(angle) * radius;
+    if (k === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+
+// Noise mass — aspect-ratio aware
+function generateNoiseMass(W, H, params, rng, seed) {
+  var cNorm = (params.complexity - 1) / 9;
+  var octaves = Math.max(1, Math.round(1 + cNorm * 5));
+  var baseFreq = 2.5 + params.organic * 1.5 + cNorm * 0.8;
+  var warpStrength = (1 - params.organic) * 0.6;
+  var erosionAmp = params.roughness * 0.35 + cNorm * 0.1;
+  var noiseInfluence = 0.5 + cNorm * 0.45;
+
+  var offsetX = (rng() - 0.5) * params.asymmetry * 0.7;
+  var offsetY = (rng() - 0.5) * params.asymmetry * 0.7;
+  var flowAngle = rng() * Math.PI * 2;
+  var stretchRatio = 1 + (1 - params.organic) * (0.2 + rng() * 0.8);
+  var radius = 0.55 - params.density * 0.18;
+
+  var threshold = rng() < 0.75 ? (0.0 + rng() * 0.1) : (0.15 + rng() * 0.2);
+
+  // min(W,H)/2 is the unit — shape scales with the smaller dimension.
+  var unit = Math.min(W, H) / 2;
+  var cx = W / 2, cy = H / 2;
+  var cosA = Math.cos(flowAngle), sinA = Math.sin(flowAngle);
+
+  var data = new Uint8ClampedArray(W * H * 4);
+
+  for (var py = 0; py < H; py++) {
+    for (var px = 0; px < W; px++) {
+      var nx = (px - cx) / unit - offsetX;
+      var ny = (py - cy) / unit - offsetY;
+
+      var rx = nx * cosA + ny * sinA;
+      var ry = -nx * sinA + ny * cosA;
+      var ex = rx / stretchRatio;
+      var ey = ry * stretchRatio;
+
+      var dist = Math.sqrt(ex * ex + ey * ey);
+      var radial = 1 - dist / radius;
+
+      var noiseX = ex * baseFreq;
+      var noiseY = ey * baseFreq;
+      var noiseVal = warpedFBM(noiseX, noiseY, octaves, warpStrength, seed);
+
+      var erosion = 0;
+      if (erosionAmp > 0.01) {
+        erosion = valueNoise2D(noiseX * 3.5, noiseY * 3.5, seed + 99991) * erosionAmp;
+      }
+
+      var fieldVal = radial + noiseVal * noiseInfluence + erosion - threshold;
+
+      var alpha;
+      if (fieldVal > 0.02) alpha = 1;
+      else if (fieldVal < -0.02) alpha = 0;
+      else alpha = smoothstep((fieldVal + 0.02) / 0.04);
+
+      var idx = (py * W + px) * 4;
+      data[idx] = 0; data[idx + 1] = 0; data[idx + 2] = 0;
+      data[idx + 3] = (alpha * 255) | 0;
+    }
+  }
+
+  return { data: data, offsetX: offsetX, offsetY: offsetY, flowAngle: flowAngle, stretchRatio: stretchRatio };
+}
+
+// Silhouette generator — main shape uses mainParams, knockouts use knockoutParams.
+// lowQuality=true caps internal noise resolution at 320 (vs 1024) for snappy
+// real-time previews during slider drag and rotation drag.
+function generateSilhouette(ctx, W, H, mainParams, knockoutParams, rng, rotation, lowQuality) {
+  var mainCPow = Math.pow((mainParams.complexity - 1) / 9, 1.3);
+  var seed = (rng() * 100000) | 0;
+
+  // Internal noise resolution — full quality caps at 1024, low quality at 320
+  var maxNoiseDim = lowQuality ? 320 : 1024;
+  var biggest = Math.max(W, H);
+  var nScale = biggest > maxNoiseDim ? (maxNoiseDim / biggest) : 1;
+  var nW = Math.max(64, Math.round(W * nScale));
+  var nH = Math.max(64, Math.round(H * nScale));
+
+  var mass = generateNoiseMass(nW, nH, mainParams, rng, seed);
+
+  var noiseCanvas = document.createElement('canvas');
+  noiseCanvas.width = nW;
+  noiseCanvas.height = nH;
+  noiseCanvas.getContext('2d').putImageData(new ImageData(mass.data, nW, nH), 0, 0);
+
+  var off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  var octx = off.getContext('2d');
+  octx.imageSmoothingEnabled = true;
+  octx.imageSmoothingQuality = 'high';
+  octx.drawImage(noiseCanvas, 0, 0, W, H);
+
+  var unit = Math.min(W, H);
+  var cx = W / 2 + mass.offsetX * unit / 2;
+  var cy = H / 2 + mass.offsetY * unit / 2;
+  var spread = unit * (0.18 + (1 - mainParams.density) * 0.22);
+
+  // Protrusions (main-shape detail)
+  octx.globalCompositeOperation = 'source-over';
+  octx.fillStyle = '#000000';
+  var numProt = Math.round(mainCPow * 6);
+  for (var i = 0; i < numProt; i++) {
+    var ang = rng() * Math.PI * 2;
+    var dist = (0.3 + rng() * 0.5) * spread;
+    var prx = cx + Math.cos(ang) * dist * mass.stretchRatio;
+    var pry = cy + Math.sin(ang) * dist / mass.stretchRatio;
+    var psize = unit * (0.04 + rng() * 0.08) * (0.7 + mainParams.scaleVar * 1.8);
+    drawBlob(octx, prx, pry, psize, mainParams.organic, mainParams.roughness, rng);
+  }
+
+  // KNOCKOUTS — independent params
+  var koCPow = Math.pow((knockoutParams.complexity - 1) / 9, 1.3);
+  var koClusterAngle = rng() * Math.PI * 2;
+  var koClusterX = Math.cos(koClusterAngle) * knockoutParams.asymmetry * spread * 0.5;
+  var koClusterY = Math.sin(koClusterAngle) * knockoutParams.asymmetry * spread * 0.5;
+  var distExponent = 0.3 + knockoutParams.density * 1.4;
+
+  octx.globalCompositeOperation = 'destination-out';
+  octx.fillStyle = '#000000';
+  var numVoids = Math.round(koCPow * 14);
+  for (var v = 0; v < numVoids; v++) {
+    var va = rng() * Math.PI * 2;
+    var vd = Math.pow(rng(), distExponent) * spread * 0.75;
+    var vx = cx + koClusterX + Math.cos(va) * vd;
+    var vy = cy + koClusterY + Math.sin(va) * vd;
+    var vsize = unit * (0.015 + rng() * 0.05) * (0.4 + knockoutParams.scaleVar * 1.8);
+    drawBlob(octx, vx, vy, vsize, knockoutParams.organic, knockoutParams.roughness * 1.2, rng);
+  }
+  octx.globalCompositeOperation = 'source-over';
+
+  // Satellites
+  octx.fillStyle = '#000000';
+  var numSats = Math.round(mainCPow * 12);
+  for (var s = 0; s < numSats; s++) {
+    var sa = rng() * Math.PI * 2;
+    var sd = spread * (1.05 + rng() * 1.1);
+    var sx = cx + Math.cos(sa) * sd;
+    var sy = cy + Math.sin(sa) * sd;
+    var ssize = unit * 0.013 * (0.3 + rng() * (1.5 + mainParams.scaleVar * 3));
+    drawBlob(octx, sx, sy, ssize, mainParams.organic, mainParams.roughness, rng);
+  }
+
+  // Composite to main canvas with rotation
+  ctx.save();
+  if (rotation) {
+    ctx.translate(W / 2, H / 2);
+    ctx.rotate(rotation);
+    ctx.translate(-W / 2, -H / 2);
+  }
+  ctx.globalAlpha = 0.15;
+  ctx.drawImage(off, 0, 0);
+  ctx.globalAlpha = 0.92;
+  ctx.drawImage(off, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function renderShape(canvas, mainParams, knockoutParams, seed, bgTransparent, rotation, lowQuality) {
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  if (!bgTransparent) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, H);
+  }
+  var rng = mulberry32(seed);
+  generateSilhouette(ctx, W, H, mainParams, knockoutParams, rng, rotation || 0, !!lowQuality);
+}
+
+// Presets
+var PRESETS = {
+  'square-1024':    { w: 1024, h: 1024 },
+  'square-2048':    { w: 2048, h: 2048 },
+  'portrait-4-5':   { w: 1080, h: 1350 },
+  'story-9-16':     { w: 1080, h: 1920 },
+  'landscape-16-9': { w: 1920, h: 1080 },
+  'wide-3-2':       { w: 1800, h: 1200 },
+  'a4-portrait':    { w: 2480, h: 3508 },
+  'a4-landscape':   { w: 3508, h: 2480 }
+};
+
+var DEFAULT_MAIN = { complexity: 6, organic: 0.25, density: 0.55, roughness: 0.4, scaleVar: 0.55, asymmetry: 0.4 };
+var DEFAULT_KO   = { complexity: 5, organic: 0.3,  density: 0.55, roughness: 0.4, scaleVar: 0.6,  asymmetry: 0.0 };
+
+var state = {
+  display: 'single',
+  canvasPreset: 'square-2048',
+  customW: 1024,
+  customH: 1024,
+  editTarget: 'main',
+  main: Object.assign({}, DEFAULT_MAIN),
+  knockout: Object.assign({}, DEFAULT_KO),
+  rotation: 0,
+  seed: Math.floor(Math.random() * 1e9),
+  gridSeeds: [],
+  bgMode: 'transparent'
+};
+for (var gi = 0; gi < 6; gi++) state.gridSeeds.push(Math.floor(Math.random() * 1e9));
+
+var els = {
+  mainCanvas:    document.getElementById('main-canvas'),
+  canvasFrame:   document.getElementById('canvas-frame'),
+  singleView:    document.getElementById('single-view'),
+  gridView:      document.getElementById('grid-view'),
+  gridCanvases:  [].slice.call(document.querySelectorAll('.grid-tile canvas')),
+  controlsPanel: document.getElementById('controls-panel'),
+  headerSeed:    document.getElementById('header-seed'),
+  captionStyle:  document.getElementById('caption-style'),
+  captionSeed:   document.getElementById('caption-seed'),
+  sizePreset:    document.getElementById('size-preset'),
+  customRow:     document.getElementById('custom-size-row'),
+  customW:       document.getElementById('custom-w'),
+  customH:       document.getElementById('custom-h'),
+  targetTint:    document.getElementById('target-tint'),
+  rotationValue: document.getElementById('rotation-value'),
+  resetRotation: document.getElementById('reset-rotation'),
+  sliders: {
+    complexity: document.getElementById('slider-complexity'),
+    organic:    document.getElementById('slider-organic'),
+    density:    document.getElementById('slider-density'),
+    roughness:  document.getElementById('slider-roughness'),
+    scaleVar:   document.getElementById('slider-scaleVar'),
+    asymmetry:  document.getElementById('slider-asymmetry')
+  },
+  vals: {
+    complexity: document.getElementById('val-complexity'),
+    organic:    document.getElementById('val-organic'),
+    density:    document.getElementById('val-density'),
+    roughness:  document.getElementById('val-roughness'),
+    scaleVar:   document.getElementById('val-scaleVar'),
+    asymmetry:  document.getElementById('val-asymmetry')
+  },
+  btnDownload:  document.getElementById('btn-download'),
+  btnCopy:      document.getElementById('btn-copy'),
+  dlLabel:      document.getElementById('dl-label'),
+  copyLabel:    document.getElementById('copy-label'),
+  gridHint:     document.getElementById('grid-hint'),
+  modal:        document.getElementById('modal'),
+  previewImg:   document.getElementById('preview-img')
+};
+
+function getCanvasSize() {
+  if (state.canvasPreset === 'custom') return { w: state.customW, h: state.customH };
+  var p = PRESETS[state.canvasPreset];
+  return p ? { w: p.w, h: p.h } : { w: 1024, h: 1024 };
+}
+function getDisplaySize(w, h) {
+  var maxDim = 1024;
+  var scale = Math.min(1, maxDim / Math.max(w, h));
+  return { w: Math.max(64, Math.round(w * scale)), h: Math.max(64, Math.round(h * scale)) };
+}
+function getEditTarget() {
+  return state.editTarget === 'knockout' ? state.knockout : state.main;
+}
+function seedLabel(s) {
+  var str = s.toString(36);
+  while (str.length < 6) str = '0' + str;
+  return str.slice(0, 6);
+}
+function radiansToDegrees(r) {
+  var d = (r * 180 / Math.PI) % 360;
+  if (d < 0) d += 360;
+  return d;
+}
+function toggleActive(selector, attrName, val) {
+  var btns = document.querySelectorAll(selector);
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].classList.toggle('active', btns[i].getAttribute(attrName) === val);
+  }
+}
+
+function render(lowQuality) {
+  var size = getCanvasSize();
+  var display = getDisplaySize(size.w, size.h);
+
+  if (els.mainCanvas.width !== display.w || els.mainCanvas.height !== display.h) {
+    els.mainCanvas.width = display.w;
+    els.mainCanvas.height = display.h;
+  }
+
+  els.singleView.style.display = state.display === 'single' ? '' : 'none';
+  els.gridView.style.display   = state.display === 'grid' ? 'grid' : 'none';
+  els.btnDownload.style.display = state.display === 'single' ? 'flex' : 'none';
+  els.btnCopy.style.display     = state.display === 'single' ? 'flex' : 'none';
+  els.gridHint.style.display    = state.display === 'grid' ? 'block' : 'none';
+
+  els.canvasFrame.classList.toggle('transparent-bg', state.bgMode === 'transparent');
+  els.canvasFrame.classList.toggle('white-bg',       state.bgMode === 'white');
+
+  els.controlsPanel.classList.toggle('editing-knockout', state.editTarget === 'knockout');
+  els.targetTint.textContent = state.editTarget === 'knockout' ? '— knockouts' : '— main shape';
+
+  if (state.display === 'single') {
+    renderShape(els.mainCanvas, state.main, state.knockout, state.seed,
+                state.bgMode === 'transparent', state.rotation, lowQuality);
+  } else {
+    for (var i = 0; i < state.gridSeeds.length; i++) {
+      var gc = els.gridCanvases[i];
+      if (gc.width !== 384) { gc.width = 384; gc.height = 384; }
+      renderShape(gc, state.main, state.knockout, state.gridSeeds[i], true, state.rotation, lowQuality);
+    }
+  }
+
+  var p = getEditTarget();
+  els.sliders.complexity.value = p.complexity;
+  els.sliders.organic.value    = p.organic;
+  els.sliders.density.value    = p.density;
+  els.sliders.roughness.value  = p.roughness;
+  els.sliders.scaleVar.value   = p.scaleVar;
+  els.sliders.asymmetry.value  = p.asymmetry;
+
+  els.vals.complexity.textContent = p.complexity;
+  els.vals.organic.textContent    = p.organic.toFixed(2);
+  els.vals.density.textContent    = p.density.toFixed(2);
+  els.vals.roughness.textContent  = p.roughness.toFixed(2);
+  els.vals.scaleVar.textContent   = p.scaleVar.toFixed(2);
+  els.vals.asymmetry.textContent  = p.asymmetry.toFixed(2);
+
+  var slabel = seedLabel(state.seed);
+  els.headerSeed.textContent = slabel;
+  els.captionStyle.textContent = 'c' + state.main.complexity + ' / drag canvas to rotate';
+  els.captionSeed.textContent = slabel + ' / studio';
+
+  els.rotationValue.textContent = Math.round(radiansToDegrees(state.rotation)) + '\u00B0';
+
+  toggleActive('[data-display]', 'data-display', state.display);
+  toggleActive('[data-bg]',      'data-bg',      state.bgMode);
+  toggleActive('[data-target]',  'data-target',  state.editTarget);
+
+  els.customRow.style.display = state.canvasPreset === 'custom' ? 'flex' : 'none';
+}
+
+// ─── Render scheduling ────────────────────────────────────────────
+// Coalesce repeated render calls into one per animation frame, and
+// support a low-quality mode (smaller noise field) for snappy real-time
+// feedback during slider drag and canvas rotation. Quality "full" wins
+// over "low" if both are queued in the same frame.
+var _renderQueued = false;
+var _pendingQuality = 'full';
+
+function scheduleRender(quality) {
+  if (quality === 'full' || _pendingQuality !== 'full') {
+    _pendingQuality = quality;
+  }
+  if (_renderQueued) return;
+  _renderQueued = true;
+  requestAnimationFrame(function () {
+    var q = _pendingQuality;
+    _renderQueued = false;
+    _pendingQuality = 'full';
+    render(q === 'low');
+  });
+}
+
+// Events
+els.sizePreset.addEventListener('change', function (e) {
+  state.canvasPreset = e.target.value;
+  scheduleRender('full');
+});
+els.customW.addEventListener('input', function (e) {
+  var v = parseInt(e.target.value, 10);
+  if (!isNaN(v) && v >= 256 && v <= 8192) { state.customW = v; scheduleRender('low'); }
+});
+els.customW.addEventListener('change', function () { scheduleRender('full'); });
+els.customH.addEventListener('input', function (e) {
+  var v = parseInt(e.target.value, 10);
+  if (!isNaN(v) && v >= 256 && v <= 8192) { state.customH = v; scheduleRender('low'); }
+});
+els.customH.addEventListener('change', function () { scheduleRender('full'); });
+
+function wireSegmented(selector, attr, stateKey) {
+  var btns = document.querySelectorAll(selector);
+  for (var i = 0; i < btns.length; i++) {
+    btns[i].addEventListener('click', function (e) {
+      state[stateKey] = e.currentTarget.getAttribute(attr);
+      scheduleRender('full');
+    });
+  }
+}
+wireSegmented('[data-display]', 'data-display', 'display');
+wireSegmented('[data-bg]',      'data-bg',      'bgMode');
+wireSegmented('[data-target]',  'data-target',  'editTarget');
+
+var sliderDefs = [
+  ['slider-complexity', 'complexity', true],
+  ['slider-organic',    'organic',    false],
+  ['slider-density',    'density',    false],
+  ['slider-roughness',  'roughness',  false],
+  ['slider-scaleVar',   'scaleVar',   false],
+  ['slider-asymmetry',  'asymmetry',  false]
+];
+for (var sd = 0; sd < sliderDefs.length; sd++) {
+  (function (def) {
+    var id = def[0], key = def[1], isInt = def[2];
+    var el = document.getElementById(id);
+    // input fires throughout drag — use low-res preview
+    el.addEventListener('input', function (e) {
+      var val = isInt ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
+      getEditTarget()[key] = val;
+      scheduleRender('low');
+    });
+    // change fires on release — upgrade to full quality
+    el.addEventListener('change', function () {
+      scheduleRender('full');
+    });
+  })(sliderDefs[sd]);
+}
+
+document.getElementById('btn-new').addEventListener('click', function () {
+  if (state.display === 'single') {
+    state.seed = Math.floor(Math.random() * 1e9);
+  } else {
+    state.gridSeeds = [];
+    for (var i = 0; i < 6; i++) state.gridSeeds.push(Math.floor(Math.random() * 1e9));
+  }
+  scheduleRender('full');
+});
+
+var tiles = document.querySelectorAll('.grid-tile');
+for (var t2 = 0; t2 < tiles.length; t2++) {
+  tiles[t2].addEventListener('click', function (e) {
+    var i = parseInt(e.currentTarget.getAttribute('data-grid'), 10);
+    state.seed = state.gridSeeds[i];
+    state.display = 'single';
+    scheduleRender('full');
+  });
+}
+
+// Rotation drag on canvas — low quality while dragging, full on release
+els.mainCanvas.addEventListener('pointerdown', function (e) {
+  if (state.display !== 'single') return;
+  var rect = els.mainCanvas.getBoundingClientRect();
+  var ccx = rect.left + rect.width / 2;
+  var ccy = rect.top + rect.height / 2;
+  var startMouseAngle = Math.atan2(e.clientY - ccy, e.clientX - ccx);
+  var startRotation = state.rotation;
+
+  try { els.mainCanvas.setPointerCapture(e.pointerId); } catch (err) {}
+
+  function onMove(e2) {
+    var a = Math.atan2(e2.clientY - ccy, e2.clientX - ccx);
+    state.rotation = startRotation + (a - startMouseAngle);
+    scheduleRender('low');
+  }
+  function onUp() {
+    els.mainCanvas.removeEventListener('pointermove', onMove);
+    els.mainCanvas.removeEventListener('pointerup', onUp);
+    els.mainCanvas.removeEventListener('pointercancel', onUp);
+    scheduleRender('full');
+  }
+  els.mainCanvas.addEventListener('pointermove', onMove);
+  els.mainCanvas.addEventListener('pointerup', onUp);
+  els.mainCanvas.addEventListener('pointercancel', onUp);
+  e.preventDefault();
+});
+
+els.resetRotation.addEventListener('click', function () {
+  state.rotation = 0;
+  scheduleRender('full');
+});
+
+// Theme toggle — persists explicit user choice, falls back to system preference
+function setTheme(theme) {
+  if (theme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
+  try { localStorage.setItem('shapeStudioTheme', theme); } catch (e) {}
+}
+document.getElementById('theme-toggle').addEventListener('click', function () {
+  var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  setTheme(isDark ? 'light' : 'dark');
+});
+
+function flashLabel(labelEl, msg) {
+  var original = labelEl.textContent;
+  labelEl.textContent = msg;
+  setTimeout(function () { labelEl.textContent = original; }, 1600);
+}
+
+function renderExportCanvas() {
+  var size = getCanvasSize();
+  var c = document.createElement('canvas');
+  c.width = size.w; c.height = size.h;
+  renderShape(c, state.main, state.knockout, state.seed,
+              state.bgMode === 'transparent', state.rotation);
+  return c;
+}
+
+async function copyShape() {
+  if (state.display !== 'single') return;
+
+  if (typeof ClipboardItem === 'undefined' ||
+      !navigator.clipboard || !navigator.clipboard.write) {
+    flashLabel(els.copyLabel, 'Not supported');
+    return;
+  }
+
+  try {
+    // CRITICAL: pass a Promise (not an awaited blob) so Safari preserves
+    // the user-gesture context through the async toBlob() call.
+    var blobPromise = new Promise(function (resolve, reject) {
+      var c = renderExportCanvas();
+      c.toBlob(function (blob) {
+        if (blob) resolve(blob);
+        else reject(new Error('toBlob returned null'));
+      }, 'image/png');
+    });
+
+    var item = new ClipboardItem({ 'image/png': blobPromise });
+    await navigator.clipboard.write([item]);
+    flashLabel(els.copyLabel, 'Copied');
+  } catch (err) {
+    // Fall back to download flow with a hint
+    console.warn('Copy failed:', err);
+    flashLabel(els.copyLabel, 'Use Download');
+  }
+}
+els.btnCopy.addEventListener('click', copyShape);
+
+async function downloadShape() {
+  if (state.display !== 'single') return;
+  var c = renderExportCanvas();
+  var blob = await new Promise(function (res) { c.toBlob(res, 'image/png'); });
+  var filename = 'shape-' + state.seed.toString(36) + '.png';
+
+  try {
+    var file = new File([blob], filename, { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file] });
+      flashLabel(els.dlLabel, 'Saved');
+      return;
+    }
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+  }
+
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  els.previewImg.src = url;
+  els.previewImg.classList.toggle('white-bg', state.bgMode === 'white');
+  els.modal.classList.add('open');
+  flashLabel(els.dlLabel, 'Saved');
+}
+els.btnDownload.addEventListener('click', downloadShape);
+
+function closeModal() {
+  if (els.previewImg.src && els.previewImg.src.indexOf('blob:') === 0) {
+    URL.revokeObjectURL(els.previewImg.src);
+  }
+  els.previewImg.src = '';
+  els.modal.classList.remove('open');
+}
+document.getElementById('btn-close-preview').addEventListener('click', closeModal);
+els.modal.addEventListener('click', function (e) {
+  if (e.target === els.modal) closeModal();
+});
+
+render();
+</script>
+
+</body>
+</html>

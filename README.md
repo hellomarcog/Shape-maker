@@ -1,4 +1,2 @@
 # Shape-maker
-Generate random shapes
-
-http://hellomarcog.github.com/Shape-maker/V3.html
+Generate random, dynamic shapes to use a inspiration for a drawing
